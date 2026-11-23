@@ -1,0 +1,37 @@
+# VoiceOps Assistant - runtime + test dependencies.
+# Lower bounds are the versions this project was developed and tested against (Python 3.13).
+#
+# TIP (smaller, faster install on machines without an NVIDIA GPU): install CPU-only PyTorch first,
+# then the rest. Otherwise pip pulls the multi-GB CUDA build of torch.
+#     pip install torch --index-url https://download.pytorch.org/whl/cpu
+#     pip install -r requirements.txt
+
+# --- API + UI ---------------------------------------------------------------
+fastapi>=0.165
+uvicorn[standard]>=0.54
+python-multipart>=0.0.34   # multipart/form-data parsing for audio uploads
+httpx>=0.28                # Streamlit -> FastAPI client (remote mode) and FastAPI TestClient
+streamlit>=1.67
+
+# --- Configuration / validation ---------------------------------------------
+pydantic>=2.14
+pydantic-settings>=2.16
+
+# --- Speech-to-text -----------------------------------------------------------
+faster-whisper>=1.2        # local, free, CPU-friendly (default)
+# faster-whisper 1.2.x calls av.open(..., metadata_errors=...), which PyAV 19 removed, so with an unbounded `av`
+# pip installs a combination where *every* transcription fails while decoding audio. Verified: 18.1.1 decodes
+# wav/mp3/m4a/ogg; 19.0.2 does not. Drop this cap once faster-whisper supports PyAV 19.
+av>=11,<19
+assemblyai>=1.10           # optional cloud provider (free tier), imported lazily
+
+# --- LLM extraction + RAG answers (free tiers) ---------------------------------
+google-genai>=3.6          # Gemini (default)
+groq>=1.7                  # Groq (optional fallback)
+
+# --- Local RAG --------------------------------------------------------------------
+chromadb>=1.5
+sentence-transformers>=6.3
+
+# --- Testing ------------------------------------------------------------------------
+pytest>=9.0
