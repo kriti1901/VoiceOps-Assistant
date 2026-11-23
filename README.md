@@ -354,7 +354,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-There are 185 checks. They need **no internet, no API keys and no audio files**, and the test setup blocks internet access to prove it. They cover:
+There are 212 checks. They need **no internet, no API keys and no audio files**, and the test setup blocks internet access to prove it. They cover:
 
 - the data formats, including messy AI answers (such as `URGENT` instead of `high`)
 - speech-to-text, using stand-ins for the models, plus a real check that the audio reader opens `.wav`, `.mp3`, `.m4a` and `.ogg` files
@@ -362,6 +362,29 @@ There are 185 checks. They need **no internet, no API keys and no audio files**,
 - the searchable memory, using a real ChromaDB database
 - the API, including unsafe file names and cleanup of uploaded files
 - the screen, by running the real Streamlit app in a test
+- the benchmark script's error-rate maths, with small examples you can check by hand
+
+</details>
+
+<details>
+<summary><b>Measure speed and accuracy yourself</b></summary>
+
+Want real numbers for your own computer, for example for a resume or a blog post? A small script measures them.
+
+1. Pick a recording of 2 to 5 minutes. Your own voice reading a paragraph is fine.
+2. Save what is *actually said* in a text file, such as `my_call.txt`. Just the words, no times. This is the answer key.
+3. Run:
+
+```bash
+python scripts/benchmark_stt.py my_call.wav --reference my_call.txt
+```
+
+It prints how long the recording is, how long transcribing took, how many times faster than real time that is, and the **word error rate**: the share of words it got wrong (lower is better, and 5% means about 1 word in 20). It also writes one sentence you can adapt for a resume. Add `--repeat 3` for a steadier speed number, `--model small` to try a bigger model, or `--json results.json` to save the numbers.
+
+Good to know:
+- The numbers are for that one recording on that one computer, so say so when you quote them.
+- Words written differently count as mistakes. "2:05" and "two oh five" do not match, so write the answer key the way you expect Whisper to write it.
+- Downloading the model is not counted in the speed. The first run still needs internet for that download.
 
 </details>
 
@@ -381,6 +404,7 @@ voiceops-assistant/
 │   ├── api.py           # the API (FastAPI)
 │   └── ui.py            # the screen (Streamlit)
 ├── tests/               # the automated checks
+├── scripts/             # benchmark_stt.py: measure speech-to-text speed and accuracy
 ├── docs/images/         # the screenshots in this README
 ├── .env.example         # a template for your settings
 ├── requirements.txt     # the libraries to install

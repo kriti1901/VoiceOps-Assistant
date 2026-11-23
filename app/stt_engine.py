@@ -75,16 +75,21 @@ class FasterWhisperProvider:
                 _model_cache[key] = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
             return _model_cache[key]
 
-    def transcribe(self, audio_path: str | Path, source_file: str | None = None) -> Transcript:
-        path = Path(audio_path)
+    def load(self) -> None:
+        """Load the model now (downloading it on first use), so callers can time or surface that step separately."""
         try:
-            model = self._get_model()
+            self._get_model()
         except Exception as exc:  # noqa: BLE001
             raise TranscriptionError(
                 f"Could not load the faster-whisper '{self.model_size}' model. It is downloaded from huggingface.co "
                 f"on first use, so the first run needs network access (or a pre-populated Hugging Face cache): {exc}"
             ) from exc
+
+    def transcribe(self, audio_path: str | Path, source_file: str | None = None) -> Transcript:
+        path = Path(audio_path)
+        self.load()
         try:
+            model = self._get_model()  # cached by load()
             with _inference_lock:
                 raw_segments, info = model.transcribe(
                     str(path),
