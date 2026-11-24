@@ -323,3 +323,48 @@ def test_openapi_exposes_the_required_endpoints(make_env: Callable[..., Env]) ->
     assert "get" in paths["/api/health"]
     assert "post" in paths["/api/process-audio"]
     assert "post" in paths["/api/ask"]
+
+
+# =========================================================================== a single, failing AI provider (no fallback)
+def _failing_gemini(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """A real GeminiClient (the only provider, so no FallbackLLM wrapper) whose request is rejected as retired."""
+    from google.genai import errors as genai_errors
+
+    from app.extractor import GeminiClient
+
+    retired = {"error": {"code": 404, "message": "This model models/gemini-2.5-flash is no longer available to new users.", "status": "NOT_FOUND"}}
+    client = GeminiClient("fake-key")
+
+    def reject(**_: Any) -> Any:
+        raise genai_errors.ClientError(404, retired)
+
+    monkeypatch.setattr(client._client.models, "generate_content", reject)
+    return client
+
+
+def test_retired_ai_model_still_returns_and_indexes_the_transcript(
+    make_settings: Callable[..., Settings], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression for the crash seen on a real machine: the page showed a raw traceback instead of a warning."""
+    settings = make_settings(chunk_max_chars=100, chunk_overlap_chars=0)
+    service = VoiceOpsService(
+        settings, stt=FakeSTT(), llm=_failing_gemini(monkeypatch), store=RagStore(settings, embedder=FakeEmbedder())
+    )
+
+    result = service.process_audio("a.wav", "a.wav")  # must not raise
+
+    assert result.analysis is None
+    assert len(result.transcript.segments) == 5 and result.indexed_chunks == 5
+    assert any("GEMINI_MODEL" in w and "no longer available" in w for w in result.warnings)
+
+
+def test_retired_ai_model_makes_chat_fall_back_to_excerpts(
+    make_settings: Callable[..., Settings], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = make_settings(chunk_max_chars=100, chunk_overlap_chars=0)
+    store = RagStore(settings, embedder=FakeEmbedder())
+    store.index_transcript(make_transcript())
+
+    answer = store.query("database migration", llm=_failing_gemini(monkeypatch))
+
+    assert answer.answer_source == "extractive" and answer.citations

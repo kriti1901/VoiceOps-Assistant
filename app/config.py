@@ -9,7 +9,8 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+# Google retired gemini-2.5-flash for new users; its 404 message names this as the replacement.
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 # Groq retires models regularly; override with GROQ_MODEL. (llama-3.3-70b-versatile is no longer served.)
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 

@@ -177,3 +177,22 @@ def test_remote_backend_is_used_when_api_url_is_set(monkeypatch: pytest.MonkeyPa
         assert ("GET", "http://api.test:8000/api/health") in calls
     finally:
         st.cache_resource.clear()
+
+
+def test_retired_ai_model_shows_a_warning_not_a_traceback(
+    service: VoiceOpsService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression for the crash seen on a real machine: Google's 404 for a retired model took the whole page down."""
+    from tests.test_api import _failing_gemini
+
+    service._llm = _failing_gemini(monkeypatch)  # the only provider, so there is no fallback to absorb the error
+    at = run_app()
+    at.file_uploader(key="audio_upload").set_value(("incident_call.wav", AUDIO_BYTES, "audio/wav"))
+    at.run()
+    next(b for b in at.button if b.label == "Transcribe & analyze").click()
+    at.run()
+
+    assert not at.exception, at.exception  # no raw traceback on the page
+    assert any("GEMINI_MODEL" in w.value and "no longer available" in w.value for w in at.warning)
+    transcript_blocks = [c for c in at.code if c.language == "plaintext"]
+    assert transcript_blocks and "checkout API is returning 500 errors" in transcript_blocks[0].value  # transcript kept

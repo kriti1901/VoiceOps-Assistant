@@ -219,7 +219,7 @@ def test_gemini_only(make_settings: Callable[..., Settings]) -> None:
     settings = make_settings(google_api_key="g-key")
     client = get_llm_client(settings)
     assert isinstance(client, GeminiClient)
-    assert client.model == "gemini-2.5-flash"
+    assert client.model == "gemini-3.8-flash"  # gemini-2.5-flash was retired for new users
     assert configured_llm_providers(settings) == ["gemini"]
 
 
@@ -291,7 +291,7 @@ def test_extraction_survives_primary_provider_outage() -> None:
 
 # --------------------------------------------------------------------------- real SDK objects, network call patched
 def test_gemini_client_builds_a_valid_request_with_the_real_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = GeminiClient("fake-key", model="gemini-2.5-flash")
+    client = GeminiClient("fake-key", model="gemini-test-model")
     seen: dict[str, Any] = {}
 
     def fake_generate_content(*, model: str, contents: str, config: Any) -> Any:
@@ -301,7 +301,7 @@ def test_gemini_client_builds_a_valid_request_with_the_real_sdk(monkeypatch: pyt
     monkeypatch.setattr(client._client.models, "generate_content", fake_generate_content)
 
     assert client.generate("SYSTEM", "USER", json_mode=True) == '{"ok": true}'
-    assert seen["model"] == "gemini-2.5-flash"
+    assert seen["model"] == "gemini-test-model"
     assert seen["contents"] == "USER"
     assert seen["config"].system_instruction == "SYSTEM"
     assert seen["config"].response_mime_type == "application/json"
@@ -343,3 +343,66 @@ def test_groq_empty_response_is_an_error(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(client._client.chat.completions, "create", lambda **_: empty)
     with pytest.raises(LLMError, match="empty"):
         client.generate("s", "u")
+
+
+# --------------------------------------------------------------------------- provider errors become LLMError
+GEMINI_RETIRED = {
+    "error": {
+        "code": 404,
+        "message": "This model models/gemini-2.5-flash is no longer available to new users.",
+        "status": "NOT_FOUND",
+    }
+}
+
+
+def _raise(exc: Exception) -> Any:
+    def raiser(*_a: Any, **_k: Any) -> Any:
+        raise exc
+
+    return raiser
+
+
+def test_gemini_sdk_errors_become_llm_errors_with_a_model_hint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: a retired model raised Google's own ClientError, which is not an LLMError, and crashed the app."""
+    from google.genai import errors as genai_errors
+
+    client = GeminiClient("fake-key")
+    monkeypatch.setattr(client._client.models, "generate_content", _raise(genai_errors.ClientError(404, GEMINI_RETIRED)))
+
+    with pytest.raises(LLMError) as info:
+        client.generate("s", "u")
+
+    message = str(info.value)
+    assert "no longer available" in message  # Google's own explanation is kept
+    assert "GEMINI_MODEL" in message  # ...plus what to do about it
+    assert isinstance(info.value.__cause__, genai_errors.ClientError)
+
+
+def test_other_gemini_errors_are_wrapped_without_the_model_hint(monkeypatch: pytest.MonkeyPatch) -> None:
+    from google.genai import errors as genai_errors
+
+    client = GeminiClient("fake-key")
+    quota = genai_errors.ClientError(429, {"error": {"code": 429, "message": "Quota exceeded", "status": "RESOURCE_EXHAUSTED"}})
+    monkeypatch.setattr(client._client.models, "generate_content", _raise(quota))
+
+    with pytest.raises(LLMError) as info:
+        client.generate("s", "u")
+    assert "Quota exceeded" in str(info.value) and "GEMINI_MODEL" not in str(info.value)
+
+
+def test_groq_sdk_errors_become_llm_errors_with_a_model_hint(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = GroqClient("fake-key")
+    boom = RuntimeError("Error code: 404 - {'error': {'message': 'The model `old-model` does not exist', 'code': 'model_not_found'}}")
+    monkeypatch.setattr(client._client.chat.completions, "create", _raise(boom))
+
+    with pytest.raises(LLMError) as info:
+        client.generate("s", "u")
+    assert "model_not_found" in str(info.value) and "GROQ_MODEL" in str(info.value)
+
+
+def test_empty_response_error_is_not_wrapped_twice(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = GeminiClient("fake-key")
+    monkeypatch.setattr(client._client.models, "generate_content", lambda **_: SimpleNamespace(text=None))
+    with pytest.raises(LLMError) as info:
+        client.generate("s", "u")
+    assert str(info.value).count("Gemini") == 1 and info.value.__cause__ is None

@@ -15,7 +15,7 @@ def test_defaults_match_the_spec() -> None:
     s = Settings(_env_file=None)
     assert s.stt_provider == "local"
     assert (s.whisper_model_size, s.whisper_device, s.whisper_compute_type) == ("base", "cpu", "int8")
-    assert s.gemini_model == "gemini-2.5-flash"
+    assert s.gemini_model == "gemini-3.8-flash"
     assert s.embedding_model == "all-MiniLM-L6-v2"
     assert s.chroma_dir == Path("./chroma_db")
     assert s.llm_provider == "auto"

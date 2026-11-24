@@ -2,7 +2,7 @@
 
 Turns a transcript into a strictly validated :class:`~app.schemas.MeetingAnalysis`
 (executive summary, sentiment, action items, Jira-style incident ticket) using a
-free-tier LLM: Gemini (``gemini-2.5-flash``) by default, Groq as an optional fallback.
+free-tier LLM: Gemini by default, Groq as an optional fallback.
 
 The small ``LLMClient`` abstraction defined here is also reused by the RAG store to
 generate grounded answers, so there is exactly one place that talks to LLM SDKs.
@@ -64,6 +64,24 @@ class LLMClient(Protocol):
     def generate(self, system: str, user: str, *, json_mode: bool = False) -> str: ...
 
 
+_MODEL_GONE_MARKERS = ("404", "not_found", "not found", "no longer available", "does not exist", "model_not_found")
+
+
+def _provider_error(provider: str, env_var: str, exc: Exception) -> LLMError:
+    """Turn any SDK exception into our own ``LLMError`` so callers can degrade gracefully.
+
+    SDKs raise their own exception types (e.g. Google's ``ClientError``). Left alone, those escape every
+    ``except LLMError`` and crash the app whenever there is no fallback provider to absorb them.
+    """
+    message = f"{provider} request failed ({type(exc).__name__}): {exc}"
+    if any(marker in str(exc).lower() for marker in _MODEL_GONE_MARKERS):
+        message += (
+            f" If the model was retired, set {env_var} in your .env file to a current model name "
+            "from the provider's model list."
+        )
+    return LLMError(message)
+
+
 class GeminiClient:
     """Google Gemini via the ``google-genai`` SDK (free tier on Google AI Studio)."""
 
@@ -86,7 +104,10 @@ class GeminiClient:
             temperature=0.1,
             response_mime_type="application/json" if json_mode else None,
         )
-        response = self._client.models.generate_content(model=self.model, contents=user, config=config)
+        try:
+            response = self._client.models.generate_content(model=self.model, contents=user, config=config)
+        except Exception as exc:  # noqa: BLE001 - normalise every SDK/network failure
+            raise _provider_error("Gemini", "GEMINI_MODEL", exc) from exc
         text = response.text
         if not text:
             raise LLMError("Gemini returned an empty response (it may have been blocked by a safety filter)")
@@ -110,12 +131,15 @@ class GroqClient:
         kwargs: dict[str, Any] = {}
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
-        response = self._client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            temperature=0.1,
-            **kwargs,
-        )
+        try:
+            response = self._client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+                temperature=0.1,
+                **kwargs,
+            )
+        except Exception as exc:  # noqa: BLE001 - normalise every SDK/network failure
+            raise _provider_error("Groq", "GROQ_MODEL", exc) from exc
         text = response.choices[0].message.content
         if not text:
             raise LLMError("Groq returned an empty response")

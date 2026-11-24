@@ -139,7 +139,7 @@ Settings live in the `.env` file. `.env.example` lists all of them with comments
 | `GOOGLE_API_KEY` | none | Your free Gemini key. Used first. |
 | `GROQ_API_KEY` | none | Your free Groq key. The backup, or the main one if it is your only key. |
 | `LLM_PROVIDER` | `auto` | `auto` (Gemini, then Groq), `gemini`, or `groq`. |
-| `GEMINI_MODEL` / `GROQ_MODEL` | `gemini-2.5-flash` / `openai/gpt-oss-120b` | Which AI model to use. AI companies retire models over time; if you see "model not found", put a current model name here. |
+| `GEMINI_MODEL` / `GROQ_MODEL` | `gemini-3.8-flash` / `openai/gpt-oss-120b` | Which AI model to use. AI companies retire models over time; if you see "model not found", put a current model name here. |
 | `WHISPER_MODEL_SIZE` | `base` | `tiny`, `base`, `small`, `medium` or `large-v3`. Bigger is slower but more accurate. Try `small` for noisy calls. |
 | `STT_PROVIDER` / `ASSEMBLYAI_API_KEY` | `local` / none | Set `STT_PROVIDER=assemblyai` and add a key to use the online speech service instead. It adds speaker labels. |
 | `STT_LANGUAGE` | auto | A hint such as `en` or `de`. |
@@ -328,7 +328,7 @@ curl -s -F "file=@incident_call.wav" http://localhost:8000/api/process-audio \
 | `TypeError: open() got an unexpected keyword argument 'metadata_errors'` | A helper library (PyAV) is too new for the speech model. Run `pip install "av<19"`. (`requirements.txt` already does this.) |
 | `Could not load the faster-whisper 'base' model ... huggingface.co` | The speech model is downloaded the first time, and your computer could not reach the download site. Check your internet or proxy and try again. The search model works the same way. |
 | No summary or ticket, and a warning mentions `GOOGLE_API_KEY` | You have not added an AI key yet (step 2). The transcript and search still work. |
-| `404` or "model not found" from Gemini or Groq | The company retired that AI model. Set `GEMINI_MODEL` or `GROQ_MODEL` in `.env` to a current one from their website. |
+| A yellow warning says the AI request failed with `404`, "model not found" or "no longer available" | The company retired that AI model. Your transcript is still saved. Set `GEMINI_MODEL` or `GROQ_MODEL` in `.env` to a current model name from their website (the warning often names one), then restart the app. |
 | `429` or "rate limit" | You used up the free plan for now. Wait a minute, add the second key, or use a shorter recording. |
 | Transcription is very slow | Set `WHISPER_MODEL_SIZE=tiny`, or use `STT_PROVIDER=assemblyai`. The very first run also includes the model download. |
 | The install is several gigabytes | See "Smaller install" below. |
@@ -354,7 +354,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-There are 212 checks. They need **no internet, no API keys and no audio files**, and the test setup blocks internet access to prove it. They cover:
+There are 219 checks. They need **no internet, no API keys and no audio files**, and the test setup blocks internet access to prove it. They cover:
 
 - the data formats, including messy AI answers (such as `URGENT` instead of `high`)
 - speech-to-text, using stand-ins for the models, plus a real check that the audio reader opens `.wav`, `.mp3`, `.m4a` and `.ogg` files
