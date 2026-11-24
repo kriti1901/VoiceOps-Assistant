@@ -113,6 +113,17 @@ class GeminiClient:
             raise LLMError("Gemini returned an empty response (it may have been blocked by a safety filter)")
         return text
 
+    def available_models(self) -> list[str]:
+        """Names of the models this API key can use for text generation (used by ``scripts/check_llm.py``)."""
+        try:
+            return sorted(
+                model.name.removeprefix("models/")
+                for model in self._client.models.list()
+                if model.name and "generateContent" in (model.supported_actions or [])
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise _provider_error("Gemini", "GEMINI_MODEL", exc) from exc
+
 
 class GroqClient:
     """Groq's OpenAI-compatible chat API via the ``groq`` SDK (free tier)."""
@@ -144,6 +155,13 @@ class GroqClient:
         if not text:
             raise LLMError("Groq returned an empty response")
         return text
+
+    def available_models(self) -> list[str]:
+        """Names of the models this API key can use (used by ``scripts/check_llm.py``)."""
+        try:
+            return sorted(model.id for model in self._client.models.list().data)
+        except Exception as exc:  # noqa: BLE001
+            raise _provider_error("Groq", "GROQ_MODEL", exc) from exc
 
 
 class FallbackLLM:

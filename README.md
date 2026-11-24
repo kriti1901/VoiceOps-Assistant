@@ -327,6 +327,7 @@ curl -s -F "file=@incident_call.wav" http://localhost:8000/api/process-audio \
 |---|---|
 | `TypeError: open() got an unexpected keyword argument 'metadata_errors'` | A helper library (PyAV) is too new for the speech model. Run `pip install "av<19"`. (`requirements.txt` already does this.) |
 | `Could not load the faster-whisper 'base' model ... huggingface.co` | The speech model is downloaded the first time, and your computer could not reach the download site. Check your internet or proxy and try again. The search model works the same way. |
+| The AI step fails and you are not sure why | Run `python scripts/check_llm.py` in the project folder. It checks your key and model (without printing the key) and tells you exactly what to change. |
 | No summary or ticket, and a warning mentions `GOOGLE_API_KEY` | You have not added an AI key yet (step 2). The transcript and search still work. |
 | A yellow warning says the AI request failed with `404`, "model not found" or "no longer available" | The company retired that AI model. Your transcript is still saved. Set `GEMINI_MODEL` or `GROQ_MODEL` in `.env` to a current model name from their website (the warning often names one), then restart the app. |
 | `429` or "rate limit" | You used up the free plan for now. Wait a minute, add the second key, or use a shorter recording. |
@@ -354,7 +355,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-There are 219 checks. They need **no internet, no API keys and no audio files**, and the test setup blocks internet access to prove it. They cover:
+There are 233 checks. They need **no internet, no API keys and no audio files**, and the test setup blocks internet access to prove it. They cover:
 
 - the data formats, including messy AI answers (such as `URGENT` instead of `high`)
 - speech-to-text, using stand-ins for the models, plus a real check that the audio reader opens `.wav`, `.mp3`, `.m4a` and `.ogg` files
@@ -404,7 +405,7 @@ voiceops-assistant/
 │   ├── api.py           # the API (FastAPI)
 │   └── ui.py            # the screen (Streamlit)
 ├── tests/               # the automated checks
-├── scripts/             # benchmark_stt.py: measure speech-to-text speed and accuracy
+├── scripts/             # benchmark_stt.py (speed and accuracy), check_llm.py (checks your AI key and model)
 ├── docs/images/         # the screenshots in this README
 ├── .env.example         # a template for your settings
 ├── requirements.txt     # the libraries to install
